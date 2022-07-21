@@ -1,0 +1,458 @@
+#include <stdio.h>
+#include <math.h>
+#include "stdint.h"
+#include "stdbool.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include"math.h"
+#include"C:/Keil/EE319Kware/inc/tm4c123gh6pm.h"
+#define RED 0x02
+#define BLUE 0x04
+#define GREEN 0x08
+
+void UART_Init(void)
+    {
+
+     SYSCTL_RCGCUART_R |= 0X0020 ;                            /* setting clock to UART5 */
+     SYSCTL_RCGCGPIO_R |= 0x0010;                             /* activate port E */
+     while((SYSCTL_PRGPIO_R&0x0010)==0){};                   //delay
+     UART5_CTL_R &= ~0x0001 ;                                /* disable UART */
+     UART5_IBRD_R =104 ;                                     /* IBRD = system clock(16Mega) / (16 * clock div) */
+     UART5_FBRD_R = 11 ;                                     /* FBDR = round ( 0.16667 * 64)+0.5  =  */
+     UART5_LCRH_R = 0x0070;                                   /* set 8 bits for length , FIFO enable , one stop , no parity  */
+     UART5_CTL_R = 0x0301 ;                                   /* enable UARTEN , TXE and RXE */
+     GPIO_PORTE_DEN_R |= 0x30;                                                           /* Make PE4 and PE5 as digital */
+     GPIO_PORTE_AFSEL_R |= 0x30 ;                                                        /* Use PE4,PE5 alternate function */
+     GPIO_PORTE_PCTL_R =(GPIO_PORTE_PCTL_R & 0xFF00FFFF)+0x00110000 ;                    /* configure PE4 and PE5 for UART */
+     GPIO_PORTE_AMSEL_R &= ~0x30;                                                        /*disable analog for PE4 , PE5 */
+}
+
+//.....................................................................................................................//
+
+
+
+
+void init_port(){
+SYSCTL_RCGCGPIO_R |=0x20 ;
+while((SYSCTL_PRGPIO_R & 0x20)==0){};
+
+GPIO_PORTF_LOCK_R=0x4C4F434B;
+GPIO_PORTF_CR_R=0x1F;
+GPIO_PORTF_AFSEL_R=0;
+GPIO_PORTF_PCTL_R=0;
+GPIO_PORTF_AMSEL_R=0;
+GPIO_PORTF_DIR_R=0x0E;
+GPIO_PORTF_DEN_R=0x1F;
+GPIO_PORTF_PUR_R=0x11;
+//GPIO_PORTF_DATA_R&=0x0E;
+
+
+}
+
+//.....................................................................................................................//
+
+double Cordinates_of_GPS(double *latitude, double *longtude)  //lat do
+{
+
+
+    char first_ch = '0', dummy_var = '0';   //initil values.
+
+     //variables for storing the latitude and longtude as a strings
+     char lat_arr[10] = "0", longt_arr[11] = "0";       //lat,longt
+    // getting the first char from gps
+ while(1){
+    while ((UART5_FR_R & 0x10) != 0)
+    {}
+    first_ch = UART5_DR_R&0xFF;
+
+    // searching for $ sign as beginning of nmea coordinates
+    if(first_ch == '$')
+    {
+        // check if the GPS is sending &GPGLL
+        char second_ch = '0', third_ch = '0', fourth_ch = '0', fifth_ch = '0', six_ch = '0';
+
+
+
+        while ((UART5_FR_R & 0x10) != 0)
+        {}
+        second_ch = UART5_DR_R&0xFF;
+
+        while ((UART5_FR_R & 0x10) != 0)
+        {}
+        third_ch = UART5_DR_R&0xFF;
+
+        while ((UART5_FR_R & 0x10) != 0)
+        {}
+        fourth_ch = UART5_DR_R&0xFF;
+
+        while ((UART5_FR_R & 0x10) != 0)
+        {}
+        fifth_ch = UART5_DR_R&0xFF;
+
+        while ((UART5_FR_R & 0x10) != 0)
+        {}
+        six_ch = UART5_DR_R&0xFF;
+
+
+    // condition to check if we in the $GPGLL
+        if(second_ch == 'G' && third_ch == 'P' && fourth_ch == 'G' && fifth_ch == 'L' && six_ch == 'L')
+        {
+
+            // now we are in the line of $GPGLL
+            // extracting latitude and longitude.
+
+            int comma = 0;                       //counter for ','
+            bool end = true ;                 //a variable checks if we've ended the nmea cordinates
+            // iterative loop to get targeted coordinats
+            while(end == true)
+                {
+                    while ((UART5_FR_R & 0x10) != 0)
+                    {}
+                    dummy_var = UART5_DR_R&0xFF;
+
+
+                    if(comma == 1)       //getting latitude
+                    {
+                        if(dummy_var != ',') //skip ','
+                        {
+                            strncat(lat_arr, &dummy_var, 1);
+                            *latitude = atof(lat_arr);
+                            int  degrees1= *latitude/100;
+                            double minutes1=*latitude-(double)(degrees1*100);
+                            double seconds1=minutes1/60.00;
+                            *latitude=degrees1+seconds1;
+                        }
+                    }
+
+                    if(comma == 3)           //getting longitude
+                    {
+                        if(dummy_var != ',')  //skip ','
+                        {
+                            strncat(longt_arr, &dummy_var, 1);
+                            *longtude =atof( longt_arr);
+                            int  degrees2=*longtude/100;
+                            double minutes2=*longtude-(double)(degrees2*100);
+                            double seconds2=minutes2/60.00;
+                            *longtude=degrees2+seconds2;
+                        }
+                    }
+
+                    // we will  inceament comma variable depending on dummy_var
+                    if(dummy_var == ',')
+                    {
+                        comma++ ;
+                    }
+                    if(dummy_var == '*')
+                    {
+                        end = false ;
+                        goto main;
+                    }
+            }
+
+        }
+    }}
+ main:
+    return 0;
+}
+
+
+//.....................................................................................................................//
+
+// function_dis_1 to convert from angle to radian
+double radangle(double angle){
+
+      return angle*3.141592654/180;    // coverting from angle to radian
+}
+//.....................................................................................................................//
+
+// function_dis_3 to calculate the distance, it takes 4 paramaters and returns the distance taken
+// in first milestone, we give dummy data to the function when we call it in main function, that will differ in second milestone
+    double DistanceFunc (double latitude1 ,double longitude1 ,double latitude2 ,double longitude2) {
+    double  AngleDelta = radangle(longitude1-longitude2);
+    double cosdeltalong = cos(AngleDelta);
+    double sindeltalong = sin(AngleDelta);
+    latitude1= radangle(latitude1);
+    latitude2 = radangle(latitude2);
+    double sinlat1 = sin(latitude1);
+    double sinlat2 = sin(latitude1);
+    double coslat1 = cos(latitude1);
+    double coslat2 = cos(latitude1);
+    AngleDelta = (coslat1 * sinlat2) - (sinlat1 * coslat2 * cosdeltalong);
+    AngleDelta = pow(AngleDelta,2);
+    AngleDelta += pow(coslat2 * sindeltalong,2);
+    AngleDelta = sqrt(AngleDelta);
+    double denom = (sinlat1 * sinlat2) + (coslat1 * coslat2 * cosdeltalong);
+    AngleDelta = atan2(AngleDelta, denom);
+    return ( AngleDelta * 6372795);       // Radias of earth equals 6372795
+}
+//.....................................................................................................................//
+
+/*
+int Total_Distance(){
+int x;
+float lg2 ;
+float lt2 ;
+float lt1 ;
+float lg1 ;
+double a;
+double b;
+
+float totalDistance = 0.0;
+
+if ((GPIO_PORTF_DATA_R&0x11)==0x01) //switch of pin 0 to start calculate distance and Recieve coordinates
+   {
+x=1;
+    led_Start_finish(1);
+    GPS_cordinates(&a,&b);
+lg2 = b; // update data from gps
+lt2 = a;   // update data from gps
+lt1 = a;   // update data from gps
+lg1 = b; // update data from gps
+   }
+while (x){
+float distance = GPS_distance_between(lt1,lg1,lt2,lg2);
+totalDistance=totalDistance+distance;
+    delay_milli(1500);
+lg2=lg1+0.000001;
+lt2=lt1+0.000001;
+GPS_cordinates(&a,&b);
+lg1 = a; // update data from gps
+lt1 = b;   // update data from gps
+if ((GPIO_PORTF_DATA_R&0x11)==0x10) { // switch of pin 4 to end calculation of the total distance taken
+           x=0;
+    led_Start_finish(0);
+           return totalDistance;}
+// Return total distance
+}
+}
+*/
+//.....................................................................................................................//
+
+int hundreds(double distance){
+    int a;
+    int v;
+    int r;
+    int i;
+    int e;
+    int m;
+
+    a =(int) (distance/100);  //hundreds
+    v =(int) (distance/10);
+    r = (int) a *10;
+    i = (int) (v-r);   //tens
+    e=(int) (v*10);  //450
+    m= (int) (distance - e);
+    return (a+48);
+}
+
+
+
+int tens(double distance){
+        int a;
+        int v;
+        int r;
+        int i;
+        int e;
+        int m;
+
+    a =(int) (distance/100);  //hundreds
+    v =(int) (distance/10);
+    r = (int) a *10;
+    i = (int) (v-r);   //tens
+    e=(int) (v*10);  //450
+    m= (int) (distance - e);
+    return (i+48);
+}
+
+
+
+int ones(double distance){
+        int a;
+        int v;
+        int r;
+        int i;
+        int e;
+        int m;
+
+    a =(int) (distance/100);  //hundreds
+    v =(int) (distance/10);
+    r = (int) a *10;
+    i = (int) (v-r);   //tens
+    e=(int) (v*10);  //450
+    m= (int) (distance - e);
+    return (m+48);
+
+}
+
+//.....................................................................................................................//
+
+    // PORTA For selection lines &  PORTB for output
+void Init(void){
+
+    SYSCTL_RCGCGPIO_R |= 0x20;
+    while((SYSCTL_PRGPIO_R & 0x20)==0){};
+
+    // PORTF
+    GPIO_PORTF_LOCK_R = 0x4C4F434B;
+    GPIO_PORTF_CR_R = 0x1F;
+
+    GPIO_PORTF_DIR_R = 0xE;
+    GPIO_PORTF_PUR_R = 0x11;
+
+    GPIO_PORTF_DEN_R = 0x1F;
+    GPIO_PORTF_AMSEL_R = 0;
+
+    GPIO_PORTF_AFSEL_R = 0;
+    GPIO_PORTF_PCTL_R = 0 ;
+
+}
+
+//.....................................................................................................................//
+
+
+
+
+    // PORTA For Sellectors &  PORTB to Showin output
+    void LCD_init(void){
+SYSCTL_RCGCGPIO_R |= 0x00; //PORTA clock
+SYSCTL_RCGCGPIO_R |= 0x01;
+SYSCTL_RCGCGPIO_R |= 0x02;
+GPIO_PORTA_DIR_R |=0xE0; //PORTA controls RS,E and R/W
+GPIO_PORTA_DEN_R |=0xE0;
+GPIO_PORTB_DIR_R |=0xFF; //PORTB D0-D7
+GPIO_PORTB_DEN_R |=0xFF; //PORTB D0-D7
+LCD_Cmd(0x38); //8-bits,2 display lines, 5x7 font
+LCD_Cmd(0x06); //increments automatically
+LCD_Cmd(0x0F); //Turn on display
+LCD_Cmd(0x01); //clear display
+
+}
+        //.....................................................................................................................//
+
+void LCD_Cmd(unsigned char command)
+{
+GPIO_PORTA_DATA_R = 0x00; //RS =0, E=0, RW=0
+GPIO_PORTB_DATA_R =command;
+GPIO_PORTA_DATA_R =0x80; //E=1 to secure command
+delay_micro(0);
+GPIO_PORTA_DATA_R =0x00;
+if(command <4) delay_milli(2); else delay_micro(37);
+    }
+    void LCD_Data(unsigned char data) { GPIO_PORTA_DATA_R =0x20; //RS=1, E=0,RW=0
+    GPIO_PORTB_DATA_R =data;
+    GPIO_PORTA_DATA_R |= 0x80;
+    GPIO_PORTA_DATA_R =0x00;
+    delay_micro(0);
+
+    }
+        //.....................................................................................................................//
+
+// For Delay
+
+void delay_milli(int n){
+int i,j;
+for(i=0;i<n;i++){
+    for(j=0;j<3180;j++)
+{}
+}
+}
+
+void delay_micro(int n){
+int i,j;
+for(i=0;i<n;i++)
+for(j=0;j<3;j++)
+{}
+}
+
+//.....................................................................................................................//
+
+void lcd_print(double distance){
+LCD_Cmd(0x01);
+    LCD_Cmd(0x80);
+    delay_milli(500);
+    LCD_Data('T');
+    delay_milli(1);
+    LCD_Data('I');
+    delay_milli(1);
+    LCD_Data('V');
+    delay_milli(1);
+    LCD_Data('A');
+    delay_milli(500);
+    while(1){
+    if( (GPIO_PORTF_DATA_R & 0x11) == 0x01 ){
+        GPIO_PORTF_DATA_R = 0x02;
+    }
+
+    else if( (GPIO_PORTF_DATA_R & 0x11)==0x10 ){
+        GPIO_PORTF_DATA_R = 0x02;
+    }
+
+    else {
+        GPIO_PORTF_DATA_R = 0x0E;
+    }
+}
+}
+
+//.....................................................................................................................//
+
+
+void led_100(double distance) {  //function turns on the green LED when the distance> 100 meters
+    if (distance >= 100) {
+        GPIO_PORTF_DATA_R = GREEN;
+    }
+}
+
+//.....................................................................................................................//
+
+void led_Start_finish(int var) {  //function to turn on the blue LED when starting calculate distance and turn off at the End point
+    if (var == 1) {
+        GPIO_PORTF_DATA_R = BLUE;
+    }
+    else{
+        GPIO_PORTF_DATA_R = 0x00;
+    }
+}
+//.....................................................................................................................//
+
+void main(){
+
+     init_port();
+     LCD_init();
+     UART_Init();
+     double lg2 ;
+     double lt2 ;
+     double lt1 ;
+     double lg1 ;
+     double arwa;
+     double nada;
+
+
+     //switch of pin 0 to start calculate distance and Recieve coordinates
+     exit:
+     while((GPIO_PORTF_DATA_R&0x11)!=0x01){}
+               double totalDistance = 0.0;
+         led_Start_finish(1);
+         Cordinates_of_GPS(&arwa,&nada);
+     lg2 = nada; // update data from gps
+     lt2 = arwa;   // update data from gps
+     lt1 = arwa;   // update data from gps
+     lg1 = nada; // update data from gps
+     while (1){
+     double distance = DistanceFunc(lt1,lg1,lt2,lg2);
+     totalDistance=totalDistance+distance;
+     lcd_print (totalDistance);
+     lg2=lg1;
+     lt2=lt1;
+     while((GPIO_PORTF_DATA_R&0x11)!=0x01){}
+     Cordinates_of_GPS(&arwa,&nada);
+     lg1 = nada; // update data from gps
+     lt1 = arwa;   // update data from gps
+     if ((GPIO_PORTF_DATA_R&0x11)==0x10) { // switch of pin 4 to end calculation of the total distance taken
+         led_Start_finish(0);
+         led_100(totalDistance);
+         delay_milli(10000);
+         goto exit;
+     }
+}
+}
